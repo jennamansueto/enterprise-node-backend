@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { APPOINTMENT_STATUS } from '../config/constants';
+import customerService from './customer-service';
 import moment from 'moment';
 
 export interface ScheduleRequest {
@@ -51,12 +52,8 @@ export class AppointmentService {
 
     logger.info(`[AppointmentService] Scheduling appointment for customer ${customerId}, id ${appointmentId}`);
 
-    // Validate customer exists
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      logger.error(`[AppointmentService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
-    }
+    // Validate customer exists (delegated to CustomerService as single source of truth)
+    const customer = customerService.getCustomerOrThrow(customerId);
 
     // Validate service type
     const validServiceTypes = ['consultation', 'maintenance', 'installation', 'repair', 'inspection', 'assessment', 'follow_up'];
@@ -315,11 +312,8 @@ export class AppointmentService {
 
   // Get appointments for a customer
   public getCustomerAppointments(customerId: string, status?: string): any[] {
-    // Validate customer
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      throw 'Customer not found: ' + customerId;
-    }
+    // Validate customer (delegated to CustomerService as single source of truth)
+    customerService.getCustomerOrThrow(customerId);
 
     if (status) {
       return dbAll(

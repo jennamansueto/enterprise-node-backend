@@ -1,6 +1,7 @@
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { TIER_RATES, DISCOUNT_THRESHOLDS } from '../config/constants';
+import { CustomerNotFoundError } from '../utils/errors';
 import moment from 'moment';
 
 export interface CustomerSummary {
@@ -48,17 +49,25 @@ export interface CustomerSummary {
 }
 
 export class CustomerService {
+  /**
+   * Look up a customer by ID, throwing CustomerNotFoundError if not found.
+   * This is the single source of truth for customer existence validation.
+   */
+  public getCustomerOrThrow(customerId: string): any {
+    const customer = this.getCustomer(customerId);
+    if (!customer) {
+      throw new CustomerNotFoundError(customerId);
+    }
+    return customer;
+  }
+
   // Get comprehensive customer account summary
   // Aggregates data from billing, appointments, and notifications
   public getCustomerSummary(customerId: string): CustomerSummary {
     logger.info(`[CustomerService] Generating account summary for customer ${customerId}`);
 
     // Fetch customer record
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      logger.error(`[CustomerService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
-    }
+    const customer = this.getCustomerOrThrow(customerId);
 
     // Fetch billing data
     const billingStats = dbGet(`
@@ -284,7 +293,7 @@ export class CustomerService {
 
   // Update customer tier
   public updateCustomerTier(customerId: string, newTier: string): any {
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
+    const customer = this.getCustomer(customerId);
     if (!customer) {
       return { ok: false, error: 'Customer not found' };
     }

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { BILLING_TIERS, TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
+import customerService from './customer-service';
 import config from '../config';
 
 export interface ChargeRequest {
@@ -47,12 +48,8 @@ export class BillingService {
 
     logger.info(`[BillingService] Starting charge process for customer ${customerId}, txn ${transactionId}`);
 
-    // Validate customer exists
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      logger.error(`[BillingService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
-    }
+    // Validate customer exists (delegated to CustomerService as single source of truth)
+    const customer = customerService.getCustomerOrThrow(customerId);
 
     // Validate payment method
     if (!paymentMethod || paymentMethod.trim() === '') {
@@ -222,11 +219,8 @@ export class BillingService {
 
   // Get billing history for a customer
   public getBillingHistory(customerId: string, limit: number = 50): any[] {
-    // Validate customer
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      throw 'Customer not found: ' + customerId;
-    }
+    // Validate customer (delegated to CustomerService as single source of truth)
+    customerService.getCustomerOrThrow(customerId);
 
     const transactions = dbAll(
       'SELECT * FROM billing_transactions WHERE customer_id = ? ORDER BY created_at DESC LIMIT ?',
@@ -238,7 +232,7 @@ export class BillingService {
 
   // Calculate the estimated charge for a customer based on tier and discounts
   public calculateEstimate(customerId: string, tier: string): any {
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
+    const customer = customerService.getCustomer(customerId);
 
     if (!customer) {
       return { ok: false, error: 'Customer not found' };

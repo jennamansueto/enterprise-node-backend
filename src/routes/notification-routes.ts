@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbGet } from '../database';
+import customerService from '../services/customer-service';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
+import { CustomerNotFoundError } from '../utils/errors';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -64,16 +65,8 @@ router.post('/send', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate customer exists - duplicated again
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      res.status(404).json({
-        error: 'Customer not found',
-        customerId,
-        requestId,
-      });
-      return;
-    }
+    // Validate customer exists (delegated to CustomerService as single source of truth)
+    const customer = customerService.getCustomerOrThrow(customerId);
 
     // Validate channel
     if (channel !== 'email' && channel !== 'sms' && channel !== 'push') {
@@ -126,6 +119,16 @@ router.post('/send', async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     const duration = Date.now() - startTime;
+
+    if (error instanceof CustomerNotFoundError) {
+      res.status(404).json({
+        error: 'Customer not found',
+        customerId: error.customerId,
+        requestId,
+      });
+      return;
+    }
+
     logger.error(`[NotificationRoute] Error in notification request ${requestId}: ${error.message || error}`);
 
     res.status(500).json({
@@ -145,6 +148,10 @@ router.get('/history/:customerId', async (req: Request, res: Response) => {
     const history = notificationService.getNotificationHistory(customerId, limit);
     res.json({ success: true, data: history });
   } catch (error: any) {
+    if (error instanceof CustomerNotFoundError) {
+      res.status(500).json({ error: 'Customer not found: ' + error.customerId });
+      return;
+    }
     res.status(500).json({ error: String(error) });
   }
 });

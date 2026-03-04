@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbGet } from '../database';
 import appointmentService from '../services/appointment-service';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
+import { CustomerNotFoundError } from '../utils/errors';
 import { APPOINTMENT_STATUS } from '../config/constants';
 import jwt from 'jsonwebtoken';
 import moment from 'moment';
@@ -82,16 +82,7 @@ router.post('/schedule', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate customer exists - duplicated check
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      res.status(404).json({
-        error: 'Customer not found',
-        customerId,
-        requestId,
-      });
-      return;
-    }
+    // Customer existence is validated by the service layer (single source of truth)
 
     // Validate service type
     const validServiceTypes = ['consultation', 'maintenance', 'installation', 'repair', 'inspection', 'assessment', 'follow_up'];
@@ -189,6 +180,15 @@ router.post('/schedule', async (req: Request, res: Response) => {
       return;
     }
 
+    if (error instanceof CustomerNotFoundError) {
+      res.status(404).json({
+        error: 'Customer not found',
+        customerId: error.customerId,
+        requestId,
+      });
+      return;
+    }
+
     logger.error(`[AppointmentRoute] Error in schedule request ${requestId}: ${error.message || error}`, { stack: error.stack });
 
     res.status(500).json({
@@ -208,6 +208,10 @@ router.get('/customer/:customerId', async (req: Request, res: Response) => {
     const appointments = appointmentService.getCustomerAppointments(customerId, status);
     res.json({ success: true, data: appointments });
   } catch (error: any) {
+    if (error instanceof CustomerNotFoundError) {
+      res.status(500).json({ error: 'Customer not found: ' + error.customerId });
+      return;
+    }
     logger.error(`[AppointmentRoute] Error fetching appointments: ${error}`);
     res.status(500).json({ error: String(error) });
   }
