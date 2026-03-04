@@ -1,12 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbGet } from '../database';
 import appointmentService from '../services/appointment-service';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
-import { APPOINTMENT_STATUS } from '../config/constants';
+import { ServiceError } from '../utils/service-error';
 import jwt from 'jsonwebtoken';
-import moment from 'moment';
 
 const router = Router();
 
@@ -45,7 +43,7 @@ router.post('/schedule', async (req: Request, res: Response) => {
       recurring,
     } = req.body;
 
-    // Input validation
+    // Request-level validation: required fields
     if (!customerId) {
       res.status(400).json({
         error: 'customerId is required',
@@ -82,55 +80,7 @@ router.post('/schedule', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate customer exists - duplicated check
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      res.status(404).json({
-        error: 'Customer not found',
-        customerId,
-        requestId,
-      });
-      return;
-    }
-
-    // Validate service type
-    const validServiceTypes = ['consultation', 'maintenance', 'installation', 'repair', 'inspection', 'assessment', 'follow_up'];
-    if (!validServiceTypes.includes(serviceType.toLowerCase())) {
-      res.status(400).json({
-        error: 'Invalid service type: ' + serviceType,
-        validTypes: validServiceTypes,
-        requestId,
-      });
-      return;
-    }
-
-    // Validate date format - duplicated validation
-    if (!scheduledDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      res.status(400).json({
-        error: 'Invalid date format. Expected YYYY-MM-DD',
-        requestId,
-      });
-      return;
-    }
-
-    // Validate time format - duplicated validation
-    if (!scheduledTime.match(/^\d{2}:\d{2}$/)) {
-      res.status(400).json({
-        error: 'Invalid time format. Expected HH:MM',
-        requestId,
-      });
-      return;
-    }
-
-    // Duration validation
     const duration = durationMinutes || 60;
-    if (duration < 15 || duration > 480) {
-      res.status(400).json({
-        error: 'Duration must be between 15 and 480 minutes',
-        requestId,
-      });
-      return;
-    }
 
     // Schedule the appointment
     const result = await appointmentService.scheduleAppointment(
@@ -175,6 +125,15 @@ router.post('/schedule', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     const duration = Date.now() - startTime;
+
+    // Handle service validation errors
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({
+        ...error.responseBody,
+        requestId,
+      });
+      return;
+    }
 
     // Handle conflict errors specifically
     if (error.code === 'APPOINTMENT_CONFLICT') {

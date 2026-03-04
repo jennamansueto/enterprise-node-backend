@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { BILLING_TIERS, TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
+import { ServiceError } from '../utils/service-error';
+import { VALID_PAYMENT_METHODS } from '../validators';
 import config from '../config';
 
 export interface ChargeRequest {
@@ -51,18 +53,24 @@ export class BillingService {
     const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
     if (!customer) {
       logger.error(`[BillingService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
+      throw new ServiceError('Customer not found', 404, { error: 'Customer not found', customerId });
     }
 
     // Validate payment method
     if (!paymentMethod || paymentMethod.trim() === '') {
       logger.error(`[BillingService] Invalid payment method for customer ${customerId}`);
-      throw new Error('Payment method is required');
+      throw new ServiceError('Payment method is required', 400, {
+        error: 'paymentMethod is required',
+        code: 'INVALID_INPUT',
+      });
     }
 
-    if (paymentMethod !== 'credit_card' && paymentMethod !== 'bank_transfer' && paymentMethod !== 'invoice' && paymentMethod !== 'wallet') {
+    if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
       logger.warn(`[BillingService] Unsupported payment method: ${paymentMethod}`);
-      throw new Error('Unsupported payment method: ' + paymentMethod);
+      throw new ServiceError('Invalid payment method', 400, {
+        error: 'Invalid payment method: ' + paymentMethod,
+        validMethods: [...VALID_PAYMENT_METHODS],
+      });
     }
 
     // Determine the base amount
@@ -245,26 +253,26 @@ export class BillingService {
     }
 
     const tierKey = (tier || customer.tier || 'basic').toLowerCase();
-    let baseAmount = TIER_RATES[tierKey] || TIER_RATES['basic'];
+    const baseAmount = TIER_RATES[tierKey] || TIER_RATES['basic'];
 
     let discountAmount = 0;
-    let discountReasons: string[] = [];
+    const discountReasons: string[] = [];
 
     // Loyalty discount check
-    if (customer.loyalty_months >= 12) {
-      discountAmount += baseAmount * 0.10;
+    if (customer.loyalty_months >= DISCOUNT_THRESHOLDS.LOYALTY_MONTHS) {
+      discountAmount += baseAmount * DISCOUNT_THRESHOLDS.LOYALTY_DISCOUNT_PCT;
       discountReasons.push('loyalty');
     }
 
     // Volume discount check
-    if (customer.active_services >= 5) {
-      discountAmount += baseAmount * 0.15;
+    if (customer.active_services >= DISCOUNT_THRESHOLDS.VOLUME_MIN_SERVICES) {
+      discountAmount += baseAmount * DISCOUNT_THRESHOLDS.VOLUME_DISCOUNT_PCT;
       discountReasons.push('volume');
     }
 
     // Bundle check
     if (customer.active_services >= 3 && customer.tier !== 'basic') {
-      discountAmount += baseAmount * 0.08;
+      discountAmount += baseAmount * DISCOUNT_THRESHOLDS.BUNDLE_DISCOUNT_PCT;
       discountReasons.push('bundle');
     }
 

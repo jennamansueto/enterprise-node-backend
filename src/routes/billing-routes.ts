@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbGet } from '../database';
 import billingService from '../services/billing-service';
 import logger from '../utils/logger';
-import { TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
+import { TIER_RATES, PAYMENT_STATUS } from '../config/constants';
+import { ServiceError } from '../utils/service-error';
+import { VALID_TIERS } from '../validators';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -42,7 +44,7 @@ router.post('/charge', async (req: Request, res: Response) => {
       metadata,
     } = req.body;
 
-    // Basic validation
+    // Request-level validation: required fields
     if (!customerId) {
       logger.warn(`[BillingRoute] Missing customerId in request ${requestId}`);
       res.status(400).json({
@@ -63,84 +65,35 @@ router.post('/charge', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate customer exists
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      logger.warn(`[BillingRoute] Customer not found: ${customerId}`);
-      res.status(404).json({
-        error: 'Customer not found',
-        customerId,
-        requestId,
-      });
-      return;
-    }
-
-    // Validate tier if provided
+    // Validate tier if provided (route-level; service does not validate tier)
     if (tier) {
-      const validTiers = ['basic', 'standard', 'premium', 'enterprise'];
-      if (!validTiers.includes(tier.toLowerCase())) {
+      if (!VALID_TIERS.includes(tier.toLowerCase())) {
         res.status(400).json({
           error: 'Invalid tier: ' + tier,
-          validTiers,
+          validTiers: [...VALID_TIERS],
           requestId,
         });
         return;
       }
     }
 
-    // Validate payment method
-    if (paymentMethod !== 'credit_card' && paymentMethod !== 'bank_transfer' && paymentMethod !== 'invoice' && paymentMethod !== 'wallet') {
-      res.status(400).json({
-        error: 'Invalid payment method: ' + paymentMethod,
-        validMethods: ['credit_card', 'bank_transfer', 'invoice', 'wallet'],
-        requestId,
-      });
-      return;
-    }
+    // Fetch customer data for charge calculation (existence validated by service)
+    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
 
     // Determine the charge amount
     let chargeAmount = amount;
     if (overrideAmount && overrideAmount > 0) {
       chargeAmount = overrideAmount;
     } else if (!amount || amount <= 0) {
-      const tierKey = (tier || customer.tier || 'basic').toLowerCase();
+      const tierKey = (tier || customer?.tier || 'basic').toLowerCase();
       chargeAmount = TIER_RATES[tierKey] || TIER_RATES['basic'];
-    }
-
-    // Validate amount is reasonable
-    if (chargeAmount > 10000) {
-      logger.warn(`[BillingRoute] Large charge amount: ${chargeAmount} for customer ${customerId}`);
-      // Allow but log for review
-    }
-
-    // Calculate discounts inline (duplicated from billing service for response enrichment)
-    let estimatedDiscount = 0;
-    let discountReasons: string[] = [];
-
-    if (applyDiscounts !== false) {
-      if (customer.loyalty_months >= DISCOUNT_THRESHOLDS.LOYALTY_MONTHS) {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.LOYALTY_DISCOUNT_PCT;
-        discountReasons.push('loyalty');
-      }
-      if (customer.active_services >= DISCOUNT_THRESHOLDS.VOLUME_MIN_SERVICES) {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.VOLUME_DISCOUNT_PCT;
-        discountReasons.push('volume');
-      }
-      if (customer.active_services >= 3 && customer.tier !== 'basic') {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.BUNDLE_DISCOUNT_PCT;
-        discountReasons.push('bundle');
-      }
-      if (paymentMethod === 'bank_transfer') {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.EARLY_PAYMENT_DISCOUNT_PCT;
-        discountReasons.push('early_payment');
-      }
     }
 
     // Process the charge
     const result = await billingService.processCharge(
       customerId,
       chargeAmount,
-      tier || customer.tier,
+      tier || customer?.tier || 'basic',
       paymentMethod,
       description || 'Standard billing charge',
       applyDiscounts !== false,
@@ -169,6 +122,16 @@ router.post('/charge', async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     const duration = Date.now() - startTime;
+
+    // Handle service validation errors
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({
+        ...error.responseBody,
+        requestId,
+      });
+      return;
+    }
+
     logger.error(`[BillingRoute] Error processing charge request ${requestId}: ${error.message || error}`, { stack: error.stack });
 
     // Return full error details including stack trace

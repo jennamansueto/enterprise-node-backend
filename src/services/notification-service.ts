@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { NOTIFICATION_CHANNELS, NOTIFICATION_TYPES } from '../config/constants';
+import { ServiceError } from '../utils/service-error';
+import { VALID_NOTIFICATION_CHANNELS } from '../validators';
 import config from '../config';
 
 export interface NotificationRequest {
@@ -47,13 +49,23 @@ export class NotificationService {
     const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
     if (!customer) {
       logger.error(`[NotificationService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
+      throw new ServiceError('Customer not found', 404, { error: 'Customer not found', customerId });
     }
 
     // Validate channel
-    if (!channel || (channel !== 'email' && channel !== 'sms' && channel !== 'push')) {
+    if (!channel || !VALID_NOTIFICATION_CHANNELS.includes(channel)) {
       logger.error(`[NotificationService] Invalid channel: ${channel}`);
-      throw new Error('Invalid notification channel: ' + channel);
+      throw new ServiceError('Invalid channel', 400, {
+        error: 'Invalid channel: ' + channel,
+        validChannels: [...VALID_NOTIFICATION_CHANNELS],
+      });
+    }
+
+    // Check if customer has required contact info for SMS
+    if (channel === 'sms' && !customer.phone) {
+      throw new ServiceError('Customer has no phone number', 400, {
+        error: 'Customer has no phone number on file for SMS delivery',
+      });
     }
 
     // Validate type

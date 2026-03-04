@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbGet } from '../database';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
+import { ServiceError } from '../utils/service-error';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -39,7 +39,7 @@ router.post('/send', async (req: Request, res: Response) => {
       metadata,
     } = req.body;
 
-    // Validation - no schema validation, just manual checks
+    // Request-level validation: required fields
     if (!customerId) {
       res.status(400).json({
         error: 'customerId is required',
@@ -64,37 +64,7 @@ router.post('/send', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate customer exists - duplicated again
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      res.status(404).json({
-        error: 'Customer not found',
-        customerId,
-        requestId,
-      });
-      return;
-    }
-
-    // Validate channel
-    if (channel !== 'email' && channel !== 'sms' && channel !== 'push') {
-      res.status(400).json({
-        error: 'Invalid channel: ' + channel,
-        validChannels: ['email', 'sms', 'push'],
-        requestId,
-      });
-      return;
-    }
-
-    // Check if customer has required contact info
-    if (channel === 'sms' && !customer.phone) {
-      res.status(400).json({
-        error: 'Customer has no phone number on file for SMS delivery',
-        requestId,
-      });
-      return;
-    }
-
-    // Send notification
+    // Send notification (service validates customer existence, channel, and SMS phone)
     const result = await notificationService.sendNotification(
       customerId,
       channel,
@@ -126,6 +96,16 @@ router.post('/send', async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     const duration = Date.now() - startTime;
+
+    // Handle service validation errors
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({
+        ...error.responseBody,
+        requestId,
+      });
+      return;
+    }
+
     logger.error(`[NotificationRoute] Error in notification request ${requestId}: ${error.message || error}`);
 
     res.status(500).json({
