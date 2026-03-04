@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
+import { insertAuditLog } from '../utils/audit-log';
 import { NOTIFICATION_CHANNELS, NOTIFICATION_TYPES } from '../config/constants';
 import config from '../config';
 
@@ -199,13 +200,12 @@ export class NotificationService {
     ]);
 
     // Audit log
-    dbRun(`INSERT INTO audit_log (entity_type, entity_id, action, details, performed_by) VALUES (?, ?, ?, ?, ?)`,
-      ['notification', notificationId, deliverySuccess ? 'sent' : 'failed', JSON.stringify({
-        channel,
-        fallbackUsed,
-        fallbackChannel,
-        retries: retryCount,
-      }), 'system']);
+    insertAuditLog('notification', notificationId, deliverySuccess ? 'sent' : 'failed', {
+      channel,
+      fallbackUsed,
+      fallbackChannel,
+      retries: retryCount,
+    });
 
     return {
       notificationId,

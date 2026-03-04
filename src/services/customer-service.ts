@@ -1,5 +1,6 @@
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
+import { insertAuditLog } from '../utils/audit-log';
 import { TIER_RATES, DISCOUNT_THRESHOLDS } from '../config/constants';
 import moment from 'moment';
 
@@ -297,8 +298,7 @@ export class CustomerService {
     dbRun('UPDATE customers SET tier = ?, updated_at = ? WHERE id = ?',
       [newTier.toLowerCase(), new Date().toISOString(), customerId]);
 
-    dbRun(`INSERT INTO audit_log (entity_type, entity_id, action, details, performed_by) VALUES (?, ?, ?, ?, ?)`,
-      ['customer', customerId, 'tier_updated', JSON.stringify({ from: customer.tier, to: newTier }), 'system']);
+    insertAuditLog('customer', customerId, 'tier_updated', { from: customer.tier, to: newTier });
 
     return { ok: true, customerId, previousTier: customer.tier, newTier: newTier.toLowerCase() };
   }
