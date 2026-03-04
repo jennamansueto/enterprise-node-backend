@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
-import { insertAuditLog } from '../utils/auditLog';
+import { insertAuditLog } from '../utils/audit-log';
 import { NOTIFICATION_CHANNELS, NOTIFICATION_TYPES } from '../config/constants';
 import config from '../config';
 
