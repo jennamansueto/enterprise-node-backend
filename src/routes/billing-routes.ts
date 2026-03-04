@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbGet } from '../database';
+import customerService from '../services/customer-service';
 import billingService from '../services/billing-service';
 import logger from '../utils/logger';
+import { CustomerNotFoundError } from '../utils/errors';
 import { TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
 import jwt from 'jsonwebtoken';
 
@@ -63,17 +64,8 @@ router.post('/charge', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate customer exists
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      logger.warn(`[BillingRoute] Customer not found: ${customerId}`);
-      res.status(404).json({
-        error: 'Customer not found',
-        customerId,
-        requestId,
-      });
-      return;
-    }
+    // Validate customer exists (delegated to CustomerService as single source of truth)
+    const customer = customerService.getCustomerOrThrow(customerId);
 
     // Validate tier if provided
     if (tier) {
@@ -169,6 +161,16 @@ router.post('/charge', async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     const duration = Date.now() - startTime;
+
+    if (error instanceof CustomerNotFoundError) {
+      res.status(404).json({
+        error: 'Customer not found',
+        customerId: error.customerId,
+        requestId,
+      });
+      return;
+    }
+
     logger.error(`[BillingRoute] Error processing charge request ${requestId}: ${error.message || error}`, { stack: error.stack });
 
     // Return full error details including stack trace
@@ -189,6 +191,10 @@ router.get('/history/:customerId', async (req: Request, res: Response) => {
     const history = billingService.getBillingHistory(customerId, limit);
     res.json({ success: true, data: history });
   } catch (error: any) {
+    if (error instanceof CustomerNotFoundError) {
+      res.status(404).json({ error: 'Customer not found: ' + error.customerId });
+      return;
+    }
     logger.error(`[BillingRoute] Error fetching billing history: ${error}`);
     res.status(error.includes?.('not found') ? 404 : 500).json({
       error: String(error),

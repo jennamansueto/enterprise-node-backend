@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { dbRun, dbGet, dbAll } from '../database';
+import { dbRun, dbAll } from '../database';
 import logger from '../utils/logger';
 import { NOTIFICATION_CHANNELS, NOTIFICATION_TYPES } from '../config/constants';
+import customerService from './customer-service';
 import config from '../config';
 
 export interface NotificationRequest {
@@ -43,12 +44,8 @@ export class NotificationService {
 
     logger.info(`[NotificationService] Sending notification ${notificationId} to customer ${customerId} via ${channel}`);
 
-    // Validate customer exists
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      logger.error(`[NotificationService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
-    }
+    // Validate customer exists (delegated to CustomerService as single source of truth)
+    const customer = customerService.getCustomerOrThrow(customerId);
 
     // Validate channel
     if (!channel || (channel !== 'email' && channel !== 'sms' && channel !== 'push')) {
@@ -265,10 +262,7 @@ export class NotificationService {
 
   // Get notification history for a customer
   public getNotificationHistory(customerId: string, limit: number = 50): any[] {
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      throw 'Customer not found: ' + customerId;
-    }
+    customerService.getCustomerOrThrow(customerId);
 
     return dbAll(
       'SELECT * FROM notifications WHERE customer_id = ? ORDER BY created_at DESC LIMIT ?',
