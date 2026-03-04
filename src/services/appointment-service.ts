@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
+import { insertAuditLog } from '../utils/auditLog';
 import { APPOINTMENT_STATUS } from '../config/constants';
 import moment from 'moment';
 
@@ -167,22 +168,20 @@ export class AppointmentService {
     ]);
 
     // Log audit entry
-    dbRun(`INSERT INTO audit_log (entity_type, entity_id, action, details, performed_by) VALUES (?, ?, ?, ?, ?)`,
-      ['appointment', appointmentId, 'scheduled', JSON.stringify({
-        customer: customerId,
-        service: serviceType,
-        date: scheduledDate,
-        time: scheduledTime,
-        provider: assignedProvider,
-      }), 'system']);
+    insertAuditLog('appointment', appointmentId, 'scheduled', {
+      customer: customerId,
+      service: serviceType,
+      date: scheduledDate,
+      time: scheduledTime,
+      provider: assignedProvider,
+    });
 
     // If recurring, schedule follow-ups (simplified)
     if (recurring) {
       logger.info(`[AppointmentService] Recurring appointment requested for customer ${customerId}`);
       // In production this would create additional appointment records
       // For now we just note it in the audit log
-      dbRun(`INSERT INTO audit_log (entity_type, entity_id, action, details, performed_by) VALUES (?, ?, ?, ?, ?)`,
-        ['appointment', appointmentId, 'recurring_requested', JSON.stringify({ frequency: 'monthly' }), 'system']);
+      insertAuditLog('appointment', appointmentId, 'recurring_requested', { frequency: 'monthly' });
     }
 
     return {
@@ -352,8 +351,7 @@ export class AppointmentService {
     dbRun(`UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?`,
       [APPOINTMENT_STATUS.CANCELLED, new Date().toISOString(), appointmentId]);
 
-    dbRun(`INSERT INTO audit_log (entity_type, entity_id, action, details, performed_by) VALUES (?, ?, ?, ?, ?)`,
-      ['appointment', appointmentId, 'cancelled', JSON.stringify({ reason }), 'system']);
+    insertAuditLog('appointment', appointmentId, 'cancelled', { reason });
 
     return { ok: true, appointmentId, status: APPOINTMENT_STATUS.CANCELLED };
   }

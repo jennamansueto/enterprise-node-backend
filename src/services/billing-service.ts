@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
+import { insertAuditLog } from '../utils/auditLog';
 import { BILLING_TIERS, TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
 import config from '../config';
 
@@ -175,16 +176,14 @@ export class BillingService {
         [finalAmount, new Date().toISOString(), customerId]);
 
       // Log audit entry
-      dbRun(`INSERT INTO audit_log (entity_type, entity_id, action, details, performed_by) VALUES (?, ?, ?, ?, ?)`,
-        ['billing', transactionId, 'charge_completed', JSON.stringify({ amount: finalAmount, ref: paymentReference }), 'system']);
+      insertAuditLog('billing', transactionId, 'charge_completed', { amount: finalAmount, ref: paymentReference });
     } else {
       dbRun(`
         UPDATE billing_transactions SET status = ?, error_message = ?, retry_count = ?
         WHERE id = ?
       `, [PAYMENT_STATUS.FAILED, lastError, retryCount, transactionId]);
 
-      dbRun(`INSERT INTO audit_log (entity_type, entity_id, action, details, performed_by) VALUES (?, ?, ?, ?, ?)`,
-        ['billing', transactionId, 'charge_failed', JSON.stringify({ error: lastError, retries: retryCount }), 'system']);
+      insertAuditLog('billing', transactionId, 'charge_failed', { error: lastError, retries: retryCount });
     }
 
     return {
