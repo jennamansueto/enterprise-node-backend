@@ -1,0 +1,36 @@
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import config from '../config';
+import logger from '../utils/logger';
+
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
+}
+
+interface JwtTokenPayload {
+  sub?: string;
+  userId?: string;
+}
+
+export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+  let userId = 'anonymous';
+  const authHeader = req.headers.authorization;
+
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const decoded = jwt.verify(token, config.jwtSecret) as JwtTokenPayload;
+      userId = decoded.sub || decoded.userId || 'unknown';
+    } catch (tokenErr: unknown) {
+      const message = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+      logger.warn(`[AuthMiddleware] Invalid auth token in request: ${message}`);
+    }
+  }
+
+  req.userId = userId;
+  next();
+}

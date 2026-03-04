@@ -5,6 +5,7 @@ import appointmentRoutes from './routes/appointment-routes';
 import notificationRoutes from './routes/notification-routes';
 import customerRoutes from './routes/customer-routes';
 import logger from './utils/logger';
+import { authMiddleware } from './middleware/auth';
 
 const app = express();
 
@@ -21,6 +22,9 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+// Auth middleware - extracts userId from JWT token (or defaults to 'anonymous')
+app.use(authMiddleware);
 
 // Health check
 app.get('/health', (req, res) => {
