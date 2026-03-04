@@ -1,6 +1,7 @@
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
-import { TIER_RATES, DISCOUNT_THRESHOLDS } from '../config/constants';
+import { TIER_RATES } from '../config/constants';
+import { getAvailableDiscountLabels } from '../utils/discount';
 import moment from 'moment';
 
 export interface CustomerSummary {
@@ -192,17 +193,12 @@ export class CustomerService {
       eligibleForUpgrade = true;
     }
 
-    // Available discounts
-    const discountsAvailable: string[] = [];
-    if (customer.loyalty_months >= 12) {
-      discountsAvailable.push('loyalty_10pct');
-    }
-    if (customer.active_services >= 5) {
-      discountsAvailable.push('volume_15pct');
-    }
-    if (customer.active_services >= 3 && customer.tier !== 'basic') {
-      discountsAvailable.push('bundle_8pct');
-    }
+    // Available discounts using shared utility
+    const discountsAvailable = getAvailableDiscountLabels({
+      loyaltyMonths: customer.loyalty_months,
+      activeServices: customer.active_services,
+      tier: customer.tier,
+    });
 
     // Risk flags
     const riskFlags: string[] = [];
