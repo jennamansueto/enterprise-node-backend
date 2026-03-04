@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+*.js.map
+*.d.ts
+!jest.config.ts
+.env
+.env.local
+*.sqlite
+*.db
+sonarqube_data/
+sonarqube_extensions/
+sonarqube_logs/
+.scannerwork/

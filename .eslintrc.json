@@ -1,0 +1,28 @@
+{
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint", "security"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:security/recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module"
+  },
+  "rules": {
+    "complexity": ["warn", 25],
+    "max-lines-per-function": ["warn", { "max": 300, "skipBlankLines": true, "skipComments": true }],
+    "max-params": ["warn", 8],
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-unused-vars": "warn",
+    "no-console": "off",
+    "security/detect-object-injection": "off"
+  },
+  "env": {
+    "node": true,
+    "jest": true,
+    "es2020": true
+  },
+  "ignorePatterns": ["dist/", "node_modules/", "artifacts/", "benchmarks/"]
+}

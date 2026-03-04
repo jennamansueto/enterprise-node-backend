@@ -1,0 +1,7 @@
+{
+  "threshold": 0,
+  "reporters": ["json", "console"],
+  "ignore": ["node_modules", "dist", "artifacts", "**/*.test.ts"],
+  "absolute": false,
+  "gitignore": true
+}
