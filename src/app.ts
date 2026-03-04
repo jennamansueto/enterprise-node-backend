@@ -5,6 +5,7 @@ import appointmentRoutes from './routes/appointment-routes';
 import notificationRoutes from './routes/notification-routes';
 import customerRoutes from './routes/customer-routes';
 import logger from './utils/logger';
+import { parseAuthToken } from './middleware/auth';
 
 const app = express();
 
@@ -32,6 +33,9 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Auth token parsing middleware
+app.use(parseAuthToken);
 
 // API routes
 app.use('/v1/billing', billingRoutes);

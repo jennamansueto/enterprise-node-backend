@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbGet } from '../database';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
-import jwt from 'jsonwebtoken';
 
 const router = Router();
 
@@ -16,18 +15,7 @@ router.post('/send', async (req: Request, res: Response) => {
   logger.info(`[NotificationRoute] Incoming notification request ${requestId}: ${JSON.stringify(req.body)}`);
 
   try {
-    // Auth check - duplicated from other routes
-    const authHeader = req.headers.authorization;
-    let userId = 'anonymous';
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, 'platform-secret-key-2024') as any;
-        userId = decoded.sub || decoded.userId || 'unknown';
-      } catch (tokenErr) {
-        logger.warn(`[NotificationRoute] Invalid auth token in request ${requestId}`);
-      }
-    }
+    const userId = req.userId ?? 'anonymous';
 
     const {
       customerId,
