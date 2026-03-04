@@ -20,13 +20,14 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   let userId = 'anonymous';
   const authHeader = req.headers.authorization;
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  if (authHeader?.startsWith('Bearer ')) {
     try {
       const token = authHeader.substring(7);
       const decoded = jwt.verify(token, config.jwtSecret) as JwtTokenPayload;
       userId = decoded.sub || decoded.userId || 'unknown';
-    } catch (tokenErr) {
-      logger.warn(`[AuthMiddleware] Invalid auth token in request`);
+    } catch (tokenErr: unknown) {
+      const message = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+      logger.warn(`[AuthMiddleware] Invalid auth token in request: ${message}`);
     }
   }
 
