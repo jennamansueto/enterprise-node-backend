@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbGet } from '../database';
 import billingService from '../services/billing-service';
 import logger from '../utils/logger';
-import { TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
+import { TIER_RATES, PAYMENT_STATUS } from '../config/constants';
+import { calculateDiscounts } from '../utils/discount';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -113,27 +114,20 @@ router.post('/charge', async (req: Request, res: Response) => {
       // Allow but log for review
     }
 
-    // Calculate discounts inline (duplicated from billing service for response enrichment)
+    // Calculate discounts using shared utility
     let estimatedDiscount = 0;
     let discountReasons: string[] = [];
 
     if (applyDiscounts !== false) {
-      if (customer.loyalty_months >= DISCOUNT_THRESHOLDS.LOYALTY_MONTHS) {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.LOYALTY_DISCOUNT_PCT;
-        discountReasons.push('loyalty');
-      }
-      if (customer.active_services >= DISCOUNT_THRESHOLDS.VOLUME_MIN_SERVICES) {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.VOLUME_DISCOUNT_PCT;
-        discountReasons.push('volume');
-      }
-      if (customer.active_services >= 3 && customer.tier !== 'basic') {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.BUNDLE_DISCOUNT_PCT;
-        discountReasons.push('bundle');
-      }
-      if (paymentMethod === 'bank_transfer') {
-        estimatedDiscount += chargeAmount * DISCOUNT_THRESHOLDS.EARLY_PAYMENT_DISCOUNT_PCT;
-        discountReasons.push('early_payment');
-      }
+      const discountResult = calculateDiscounts({
+        baseAmount: chargeAmount,
+        loyaltyMonths: customer.loyalty_months,
+        activeServices: customer.active_services,
+        tier: customer.tier,
+        paymentMethod,
+      });
+      estimatedDiscount = discountResult.totalDiscount;
+      discountReasons = discountResult.reasons;
     }
 
     // Process the charge

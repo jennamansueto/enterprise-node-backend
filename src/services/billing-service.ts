@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
-import { BILLING_TIERS, TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
+import { TIER_RATES, PAYMENT_STATUS } from '../config/constants';
+import { calculateDiscounts } from '../utils/discount';
 import config from '../config';
 
 export interface ChargeRequest {
@@ -81,41 +82,23 @@ export class BillingService {
       }
     }
 
-    // Calculate discounts
+    // Calculate discounts using shared utility
     let discountAmount = 0;
     let discountReason: string | null = null;
 
     if (applyDiscounts !== false) {
-      // Check loyalty discount
-      if (customer.loyalty_months >= DISCOUNT_THRESHOLDS.LOYALTY_MONTHS) {
-        const loyaltyDiscount = baseAmount * DISCOUNT_THRESHOLDS.LOYALTY_DISCOUNT_PCT;
-        discountAmount += loyaltyDiscount;
-        discountReason = 'loyalty';
-        logger.info(`[BillingService] Applied loyalty discount: ${loyaltyDiscount.toFixed(2)} for customer ${customerId}`);
-      }
+      const discountResult = calculateDiscounts({
+        baseAmount,
+        loyaltyMonths: customer.loyalty_months,
+        activeServices: customer.active_services,
+        tier: customer.tier,
+        paymentMethod,
+      });
+      discountAmount = discountResult.totalDiscount;
+      discountReason = discountResult.reasons.length > 0 ? discountResult.reasons.join('+') : null;
 
-      // Check volume discount
-      if (customer.active_services >= DISCOUNT_THRESHOLDS.VOLUME_MIN_SERVICES) {
-        const volumeDiscount = baseAmount * DISCOUNT_THRESHOLDS.VOLUME_DISCOUNT_PCT;
-        discountAmount += volumeDiscount;
-        discountReason = discountReason ? discountReason + '+volume' : 'volume';
-        logger.info(`[BillingService] Applied volume discount: ${volumeDiscount.toFixed(2)} for customer ${customerId}`);
-      }
-
-      // Check bundle discount
-      if (customer.active_services >= 3 && customer.tier !== 'basic') {
-        const bundleDiscount = baseAmount * DISCOUNT_THRESHOLDS.BUNDLE_DISCOUNT_PCT;
-        discountAmount += bundleDiscount;
-        discountReason = discountReason ? discountReason + '+bundle' : 'bundle';
-        logger.info(`[BillingService] Applied bundle discount: ${bundleDiscount.toFixed(2)} for customer ${customerId}`);
-      }
-
-      // Check early payment discount
-      if (paymentMethod === 'bank_transfer') {
-        const earlyDiscount = baseAmount * DISCOUNT_THRESHOLDS.EARLY_PAYMENT_DISCOUNT_PCT;
-        discountAmount += earlyDiscount;
-        discountReason = discountReason ? discountReason + '+early_payment' : 'early_payment';
-        logger.info(`[BillingService] Applied early payment discount: ${earlyDiscount.toFixed(2)} for customer ${customerId}`);
+      for (const reason of discountResult.reasons) {
+        logger.info(`[BillingService] Applied ${reason} discount for customer ${customerId}`);
       }
     }
 
@@ -245,28 +228,17 @@ export class BillingService {
     }
 
     const tierKey = (tier || customer.tier || 'basic').toLowerCase();
-    let baseAmount = TIER_RATES[tierKey] || TIER_RATES['basic'];
+    const baseAmount = TIER_RATES[tierKey] || TIER_RATES['basic'];
 
-    let discountAmount = 0;
-    let discountReasons: string[] = [];
-
-    // Loyalty discount check
-    if (customer.loyalty_months >= 12) {
-      discountAmount += baseAmount * 0.10;
-      discountReasons.push('loyalty');
-    }
-
-    // Volume discount check
-    if (customer.active_services >= 5) {
-      discountAmount += baseAmount * 0.15;
-      discountReasons.push('volume');
-    }
-
-    // Bundle check
-    if (customer.active_services >= 3 && customer.tier !== 'basic') {
-      discountAmount += baseAmount * 0.08;
-      discountReasons.push('bundle');
-    }
+    // Calculate discounts using shared utility (no paymentMethod for estimates)
+    const discountResult = calculateDiscounts({
+      baseAmount,
+      loyaltyMonths: customer.loyalty_months,
+      activeServices: customer.active_services,
+      tier: customer.tier,
+    });
+    const discountAmount = discountResult.totalDiscount;
+    const discountReasons = discountResult.reasons;
 
     return {
       ok: true,
