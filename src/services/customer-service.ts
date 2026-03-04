@@ -1,6 +1,8 @@
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { TIER_RATES, DISCOUNT_THRESHOLDS } from '../config/constants';
+import { ServiceError } from '../utils/service-error';
+import { VALID_TIERS } from '../validators';
 import moment from 'moment';
 
 export interface CustomerSummary {
@@ -57,7 +59,7 @@ export class CustomerService {
     const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
     if (!customer) {
       logger.error(`[CustomerService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
+      throw new ServiceError('Customer not found', 404, { error: 'Customer not found', customerId });
     }
 
     // Fetch billing data
@@ -289,8 +291,7 @@ export class CustomerService {
       return { ok: false, error: 'Customer not found' };
     }
 
-    const validTiers = ['basic', 'standard', 'premium', 'enterprise'];
-    if (!validTiers.includes(newTier.toLowerCase())) {
+    if (!VALID_TIERS.includes(newTier.toLowerCase())) {
       return { ok: false, error: 'Invalid tier' };
     }
 

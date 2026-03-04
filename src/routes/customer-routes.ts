@@ -1,13 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbGet } from '../database';
 import customerService from '../services/customer-service';
-import billingService from '../services/billing-service';
-import appointmentService from '../services/appointment-service';
-import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
+import { ServiceError } from '../utils/service-error';
 import jwt from 'jsonwebtoken';
-import { TIER_RATES, DISCOUNT_THRESHOLDS } from '../config/constants';
 
 const router = Router();
 
@@ -43,17 +39,7 @@ router.get('/:id/summary', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate customer exists - duplicated check pattern
-    const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
-    if (!customer) {
-      res.status(404).json({
-        error: 'Customer not found',
-        customerId,
-        requestId,
-      });
-      return;
-    }
-
+    // Service validates customer existence
     const summary = customerService.getCustomerSummary(customerId);
 
     const duration = Date.now() - startTime;
@@ -67,6 +53,16 @@ router.get('/:id/summary', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     const duration = Date.now() - startTime;
+
+    // Handle service validation errors
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({
+        ...error.responseBody,
+        requestId,
+      });
+      return;
+    }
+
     logger.error(`[CustomerRoute] Error in summary request ${requestId}: ${error.message || error}`);
 
     // Return internal error details

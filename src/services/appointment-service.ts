@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { APPOINTMENT_STATUS } from '../config/constants';
+import { ServiceError } from '../utils/service-error';
+import { VALID_SERVICE_TYPES, isValidDateFormat, isValidTimeFormat } from '../validators';
 import moment from 'moment';
 
 export interface ScheduleRequest {
@@ -55,26 +57,32 @@ export class AppointmentService {
     const customer = dbGet('SELECT * FROM customers WHERE id = ?', [customerId]);
     if (!customer) {
       logger.error(`[AppointmentService] Customer not found: ${customerId}`);
-      throw 'Customer not found: ' + customerId;
+      throw new ServiceError('Customer not found', 404, { error: 'Customer not found', customerId });
     }
 
     // Validate service type
-    const validServiceTypes = ['consultation', 'maintenance', 'installation', 'repair', 'inspection', 'assessment', 'follow_up'];
-    if (!serviceType || !validServiceTypes.includes(serviceType.toLowerCase())) {
+    if (!serviceType || !VALID_SERVICE_TYPES.includes(serviceType.toLowerCase())) {
       logger.error(`[AppointmentService] Invalid service type: ${serviceType}`);
-      throw new Error('Invalid service type: ' + serviceType + '. Valid types: ' + validServiceTypes.join(', '));
+      throw new ServiceError('Invalid service type', 400, {
+        error: 'Invalid service type: ' + serviceType,
+        validTypes: [...VALID_SERVICE_TYPES],
+      });
     }
 
     // Validate date format
-    if (!scheduledDate || !scheduledDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    if (!scheduledDate || !isValidDateFormat(scheduledDate)) {
       logger.error(`[AppointmentService] Invalid date format: ${scheduledDate}`);
-      throw new Error('Invalid date format. Expected YYYY-MM-DD');
+      throw new ServiceError('Invalid date format', 400, {
+        error: 'Invalid date format. Expected YYYY-MM-DD',
+      });
     }
 
     // Validate time format
-    if (!scheduledTime || !scheduledTime.match(/^\d{2}:\d{2}$/)) {
+    if (!scheduledTime || !isValidTimeFormat(scheduledTime)) {
       logger.error(`[AppointmentService] Invalid time format: ${scheduledTime}`);
-      throw new Error('Invalid time format. Expected HH:MM');
+      throw new ServiceError('Invalid time format', 400, {
+        error: 'Invalid time format. Expected HH:MM',
+      });
     }
 
     // Validate date is not in the past
@@ -98,7 +106,9 @@ export class AppointmentService {
     // Set default duration
     const duration = durationMinutes || 60;
     if (duration < 15 || duration > 480) {
-      throw new Error('Duration must be between 15 and 480 minutes');
+      throw new ServiceError('Duration validation failed', 400, {
+        error: 'Duration must be between 15 and 480 minutes',
+      });
     }
 
     // Check for scheduling conflicts
