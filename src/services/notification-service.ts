@@ -3,6 +3,7 @@ import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { NOTIFICATION_CHANNELS, NOTIFICATION_TYPES } from '../config/constants';
 import config from '../config';
+import { withRetry } from '../utils/retry';
 
 export interface NotificationRequest {
   customerId: string;
@@ -108,41 +109,34 @@ export class NotificationService {
     `, [notificationId, customerId, channel, type, finalSubject, finalBody, 'pending', timestamp]);
 
     // Attempt delivery
-    let deliverySuccess = false;
-    let retryCount = 0;
     let fallbackUsed = false;
     let fallbackChannel: string | null = null;
-    let lastError: string | null = null;
-    const maxRetries = 3; // Hard-coded
 
     // Primary channel delivery with retries
-    while (retryCount <= maxRetries && !deliverySuccess) {
-      try {
-        logger.info(`[NotificationService] Delivery attempt ${retryCount + 1} via ${channel} for notification ${notificationId}`);
-
+    const deliveryRetry = await withRetry(
+      async () => {
         if (channel === 'email') {
           await this.sendEmail(customer.email, finalSubject!, finalBody, notificationId);
-          deliverySuccess = true;
         } else if (channel === 'sms') {
           if (!customer.phone) {
             throw new Error('Customer has no phone number on file');
           }
           await this.sendSms(customer.phone, finalBody, notificationId);
-          deliverySuccess = true;
         } else if (channel === 'push') {
           await this.sendPush(customerId, finalSubject!, finalBody, notificationId);
-          deliverySuccess = true;
         }
-      } catch (err: any) {
-        lastError = err.message || String(err);
-        retryCount++;
-        logger.warn(`[NotificationService] Delivery attempt ${retryCount} failed for ${notificationId}: ${lastError}`);
+      },
+      {
+        maxRetries: 3,
+        delayMs: 500,
+        logPrefix: '[NotificationService]',
+        operationName: `Delivery via ${channel} for notification ${notificationId}`,
+      },
+    );
 
-        if (retryCount <= maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-    }
+    let deliverySuccess = deliveryRetry.success;
+    const retryCount = deliveryRetry.retryCount;
+    const lastError = deliveryRetry.lastError;
 
     // Fallback channel logic
     if (!deliverySuccess && config.enableSmsFailover) {

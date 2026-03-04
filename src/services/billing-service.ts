@@ -3,6 +3,7 @@ import { dbRun, dbGet, dbAll } from '../database';
 import logger from '../utils/logger';
 import { BILLING_TIERS, TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
 import config from '../config';
+import { withRetry } from '../utils/retry';
 
 export interface ChargeRequest {
   customerId: string;
@@ -131,37 +132,27 @@ export class BillingService {
     `, [transactionId, customerId, finalAmount, baseAmount, discountAmount, discountReason, tier || customer.tier, PAYMENT_STATUS.PROCESSING, paymentMethod, timestamp]);
 
     // Attempt payment processing with retry logic
-    let paymentReference: string | null = null;
-    let retryCount = 0;
-    let lastError: string | null = null;
-    let paymentSuccess = false;
-
-    const maxRetries = 3; // Hard-coded retry count
-
-    while (retryCount <= maxRetries && !paymentSuccess) {
-      try {
-        logger.info(`[BillingService] Payment attempt ${retryCount + 1}/${maxRetries + 1} for txn ${transactionId}`);
-
-        // Simulate payment gateway call
-        paymentReference = await this.callPaymentGateway(customerId, finalAmount, paymentMethod, transactionId);
-
-        if (paymentReference) {
-          paymentSuccess = true;
-          logger.info(`[BillingService] Payment successful: ref=${paymentReference}`);
-        } else {
+    const paymentRetry = await withRetry(
+      async () => {
+        const ref = await this.callPaymentGateway(customerId, finalAmount, paymentMethod, transactionId);
+        if (!ref) {
           throw new Error('Payment gateway returned null reference');
         }
-      } catch (err: any) {
-        lastError = err.message || String(err);
-        retryCount++;
-        logger.warn(`[BillingService] Payment attempt ${retryCount} failed: ${lastError}`);
+        logger.info(`[BillingService] Payment successful: ref=${ref}`);
+        return ref;
+      },
+      {
+        maxRetries: 3,
+        delayMs: 200,
+        logPrefix: '[BillingService]',
+        operationName: `Payment for txn ${transactionId}`,
+      },
+    );
 
-        if (retryCount <= maxRetries) {
-          // Wait before retry - hard-coded delay
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-      }
-    }
+    const paymentReference = paymentRetry.result;
+    const retryCount = paymentRetry.retryCount;
+    const paymentSuccess = paymentRetry.success;
+    const lastError = paymentRetry.lastError;
 
     // Update transaction record
     if (paymentSuccess) {
