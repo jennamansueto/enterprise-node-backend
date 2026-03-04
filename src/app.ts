@@ -5,12 +5,16 @@ import appointmentRoutes from './routes/appointment-routes';
 import notificationRoutes from './routes/notification-routes';
 import customerRoutes from './routes/customer-routes';
 import logger from './utils/logger';
+import { extractUserId } from './middleware/auth';
 
 const app = express();
 
 // Body parsing middleware
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Auth middleware - extract userId from JWT token
+app.use(extractUserId);
 
 // Request logging middleware
 app.use((req, res, next) => {
