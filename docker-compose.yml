@@ -11,6 +11,9 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DB_PATH=:memory:
+      # JWT_SECRET must be provided by the operator (e.g. via a .env file or
+      # the deployment secret store). The service refuses to start without it.
+      - JWT_SECRET=${JWT_SECRET}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
