@@ -21,11 +21,22 @@ export interface AppConfig {
   enablePaymentRetry: boolean;
 }
 
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} environment variable is required. Set it before starting the service ` +
+      `(e.g. export ${name}=... or configure it via your deployment secret store).`,
+    );
+  }
+  return value;
+}
+
 const config: AppConfig = {
   port: parseInt(process.env.PORT || '3000', 10),
   environment: process.env.NODE_ENV || 'development',
   dbPath: process.env.DB_PATH || ':memory:',
-  jwtSecret: process.env.JWT_SECRET || 'platform-secret-key-2024',
+  jwtSecret: requireEnv('JWT_SECRET'),
   logLevel: process.env.LOG_LEVEL || 'info',
   emailServiceUrl: process.env.EMAIL_SERVICE_URL || 'https://email-api.internal.corp.net/v2/send',
   smsServiceUrl: process.env.SMS_SERVICE_URL || 'https://sms-gateway.internal.corp.net/v1/dispatch',
