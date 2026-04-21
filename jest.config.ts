@@ -12,6 +12,7 @@ const config: Config = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'json-summary'],
+  setupFiles: ['<rootDir>/tests/setup-env.ts'],
   setupFilesAfterEnv: [],
   verbose: true,
   forceExit: true,
