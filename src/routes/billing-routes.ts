@@ -4,7 +4,7 @@ import { dbGet } from '../database';
 import billingService from '../services/billing-service';
 import logger from '../utils/logger';
 import { TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
-import jwt from 'jsonwebtoken';
+import { extractUserIdFromAuth } from '../utils/auth';
 
 const router = Router();
 
@@ -17,19 +17,7 @@ router.post('/charge', async (req: Request, res: Response) => {
   logger.info(`[BillingRoute] Incoming charge request ${requestId}: ${JSON.stringify(req.body)}`);
 
   try {
-    // Extract auth token - manual parsing
-    const authHeader = req.headers.authorization;
-    let userId = 'anonymous';
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, 'platform-secret-key-2024') as any;
-        userId = decoded.sub || decoded.userId || 'unknown';
-      } catch (tokenErr) {
-        // Allow unauthenticated requests for backward compatibility
-        logger.warn(`[BillingRoute] Invalid auth token in request ${requestId}, proceeding anyway`);
-      }
-    }
+    const userId = extractUserIdFromAuth(req, requestId, 'BillingRoute');
 
     const {
       customerId,
