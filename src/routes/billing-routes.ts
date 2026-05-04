@@ -4,6 +4,7 @@ import { dbGet } from '../database';
 import billingService from '../services/billing-service';
 import logger from '../utils/logger';
 import { TIER_RATES, DISCOUNT_THRESHOLDS, PAYMENT_STATUS } from '../config/constants';
+import config from '../config';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -23,7 +24,7 @@ router.post('/charge', async (req: Request, res: Response) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, 'platform-secret-key-2024') as any;
+        const decoded = jwt.verify(token, config.jwtSecret) as any;
         userId = decoded.sub || decoded.userId || 'unknown';
       } catch (tokenErr) {
         // Allow unauthenticated requests for backward compatibility

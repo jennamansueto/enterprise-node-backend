@@ -21,11 +21,27 @@ export interface AppConfig {
   enablePaymentRetry: boolean;
 }
 
+const environment = process.env.NODE_ENV || 'development';
+
+const resolveJwtSecret = (): string => {
+  const fromEnv = process.env.JWT_SECRET;
+  if (fromEnv && fromEnv.length > 0) {
+    return fromEnv;
+  }
+  if (environment === 'production') {
+    throw new Error(
+      'JWT_SECRET environment variable must be set in production. Refusing to start with an insecure default.',
+    );
+  }
+  // Development / test fallback only. Not a real credential.
+  return 'dev-only-insecure-jwt-secret-change-me';
+};
+
 const config: AppConfig = {
   port: parseInt(process.env.PORT || '3000', 10),
-  environment: process.env.NODE_ENV || 'development',
+  environment,
   dbPath: process.env.DB_PATH || ':memory:',
-  jwtSecret: process.env.JWT_SECRET || 'platform-secret-key-2024',
+  jwtSecret: resolveJwtSecret(),
   logLevel: process.env.LOG_LEVEL || 'info',
   emailServiceUrl: process.env.EMAIL_SERVICE_URL || 'https://email-api.internal.corp.net/v2/send',
   smsServiceUrl: process.env.SMS_SERVICE_URL || 'https://sms-gateway.internal.corp.net/v1/dispatch',
