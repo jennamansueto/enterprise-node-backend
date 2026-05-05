@@ -50,7 +50,7 @@ The server starts on `http://localhost:3000` by default.
 | `PORT` | Server port | `3000` |
 | `NODE_ENV` | Environment name | `development` |
 | `DB_PATH` | SQLite database path | `:memory:` |
-| `JWT_SECRET` | JWT signing secret | *(see config)* |
+| `JWT_SECRET` | JWT signing/verification secret. **Required in production** — the app will refuse to start without it. In `development` and `test`, an insecure dev-only fallback is used and a warning is logged. | *(no default; required in production)* |
 | `LOG_LEVEL` | Winston log level | `info` |
 | `EMAIL_SERVICE_URL` | Email service endpoint | *(see config)* |
 | `SMS_SERVICE_URL` | SMS gateway endpoint | *(see config)* |
