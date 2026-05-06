@@ -1,6 +1,25 @@
 // Enterprise Service Platform - Configuration Module
 // Centralized configuration for the service platform
 
+import crypto from 'crypto';
+
+function resolveJwtSecret(): string {
+  const fromEnv = process.env.JWT_SECRET;
+  if (fromEnv && fromEnv.length > 0) {
+    return fromEnv;
+  }
+  if ((process.env.NODE_ENV || 'development') === 'production') {
+    throw new Error('JWT_SECRET environment variable must be set in production');
+  }
+  // Per-process random fallback for development/test. Not persisted, never
+  // checked into source. Tokens signed with a previous process's secret will
+  // not validate after a restart, which is intentional.
+  const generated = crypto.randomBytes(32).toString('hex');
+  // eslint-disable-next-line no-console
+  console.warn('[config] JWT_SECRET not set; generated an ephemeral development secret.');
+  return generated;
+}
+
 export interface AppConfig {
   port: number;
   environment: string;
@@ -25,7 +44,7 @@ const config: AppConfig = {
   port: parseInt(process.env.PORT || '3000', 10),
   environment: process.env.NODE_ENV || 'development',
   dbPath: process.env.DB_PATH || ':memory:',
-  jwtSecret: process.env.JWT_SECRET || 'platform-secret-key-2024',
+  jwtSecret: resolveJwtSecret(),
   logLevel: process.env.LOG_LEVEL || 'info',
   emailServiceUrl: process.env.EMAIL_SERVICE_URL || 'https://email-api.internal.corp.net/v2/send',
   smsServiceUrl: process.env.SMS_SERVICE_URL || 'https://sms-gateway.internal.corp.net/v1/dispatch',
