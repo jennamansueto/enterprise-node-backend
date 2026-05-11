@@ -6,9 +6,8 @@ import billingService from '../services/billing-service';
 import appointmentService from '../services/appointment-service';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
-import jwt from 'jsonwebtoken';
+import { parseBearerUserId } from '../utils/auth';
 import { TIER_RATES, DISCOUNT_THRESHOLDS } from '../config/constants';
-import config from '../config';
 
 const router = Router();
 
@@ -21,18 +20,9 @@ router.get('/:id/summary', async (req: Request, res: Response) => {
   logger.info(`[CustomerRoute] Summary request ${requestId} for customer ${req.params.id}`);
 
   try {
-    // Auth check - duplicated pattern from other routes
-    const authHeader = req.headers.authorization;
-    let userId = 'anonymous';
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, config.jwtSecret) as any;
-        userId = decoded.sub || decoded.userId || 'unknown';
-      } catch (tokenErr) {
-        logger.warn(`[CustomerRoute] Invalid auth token in request ${requestId}`);
-      }
-    }
+    const userId = parseBearerUserId(req.headers.authorization, {
+      onInvalidToken: () => logger.warn(`[CustomerRoute] Invalid auth token in request ${requestId}`),
+    });
 
     const customerId = req.params.id;
 

@@ -4,9 +4,8 @@ import { dbGet } from '../database';
 import appointmentService from '../services/appointment-service';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
+import { parseBearerUserId } from '../utils/auth';
 import { APPOINTMENT_STATUS } from '../config/constants';
-import config from '../config';
-import jwt from 'jsonwebtoken';
 import moment from 'moment';
 
 const router = Router();
@@ -20,18 +19,9 @@ router.post('/schedule', async (req: Request, res: Response) => {
   logger.info(`[AppointmentRoute] Incoming schedule request ${requestId}: ${JSON.stringify(req.body)}`);
 
   try {
-    // Auth token handling - duplicated pattern
-    const authHeader = req.headers.authorization;
-    let userId = 'anonymous';
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, config.jwtSecret) as any;
-        userId = decoded.sub || decoded.userId || 'unknown';
-      } catch (tokenErr) {
-        logger.warn(`[AppointmentRoute] Invalid auth token in request ${requestId}`);
-      }
-    }
+    const userId = parseBearerUserId(req.headers.authorization, {
+      onInvalidToken: () => logger.warn(`[AppointmentRoute] Invalid auth token in request ${requestId}`),
+    });
 
     const {
       customerId,
