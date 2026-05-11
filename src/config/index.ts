@@ -1,6 +1,8 @@
 // Enterprise Service Platform - Configuration Module
 // Centralized configuration for the service platform
 
+import crypto from 'crypto';
+
 export interface AppConfig {
   port: number;
   environment: string;
@@ -21,11 +23,29 @@ export interface AppConfig {
   enablePaymentRetry: boolean;
 }
 
+function resolveJwtSecret(): string {
+  const fromEnv = process.env.JWT_SECRET;
+  if (fromEnv && fromEnv.length > 0) {
+    return fromEnv;
+  }
+  if ((process.env.NODE_ENV || 'development') === 'production') {
+    throw new Error(
+      'JWT_SECRET environment variable is required in production. Refusing to start without a configured signing secret.',
+    );
+  }
+  const generated = crypto.randomBytes(32).toString('hex');
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[config] JWT_SECRET is not set. Generated a random ephemeral secret for this process. Tokens will not be valid across restarts.',
+  );
+  return generated;
+}
+
 const config: AppConfig = {
   port: parseInt(process.env.PORT || '3000', 10),
   environment: process.env.NODE_ENV || 'development',
   dbPath: process.env.DB_PATH || ':memory:',
-  jwtSecret: process.env.JWT_SECRET || 'platform-secret-key-2024',
+  jwtSecret: resolveJwtSecret(),
   logLevel: process.env.LOG_LEVEL || 'info',
   emailServiceUrl: process.env.EMAIL_SERVICE_URL || 'https://email-api.internal.corp.net/v2/send',
   smsServiceUrl: process.env.SMS_SERVICE_URL || 'https://sms-gateway.internal.corp.net/v1/dispatch',
