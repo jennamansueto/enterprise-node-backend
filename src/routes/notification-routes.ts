@@ -4,6 +4,7 @@ import { dbGet } from '../database';
 import notificationService from '../services/notification-service';
 import logger from '../utils/logger';
 import jwt from 'jsonwebtoken';
+import config from '../config';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.post('/send', async (req: Request, res: Response) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, 'platform-secret-key-2024') as any;
+        const decoded = jwt.verify(token, config.jwtSecret) as any;
         userId = decoded.sub || decoded.userId || 'unknown';
       } catch (tokenErr) {
         logger.warn(`[NotificationRoute] Invalid auth token in request ${requestId}`);
