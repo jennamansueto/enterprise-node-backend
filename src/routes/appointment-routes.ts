@@ -7,6 +7,7 @@ import logger from '../utils/logger';
 import { APPOINTMENT_STATUS } from '../config/constants';
 import jwt from 'jsonwebtoken';
 import moment from 'moment';
+import config from '../config';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.post('/schedule', async (req: Request, res: Response) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, 'platform-secret-key-2024') as any;
+        const decoded = jwt.verify(token, config.jwtSecret) as any;
         userId = decoded.sub || decoded.userId || 'unknown';
       } catch (tokenErr) {
         logger.warn(`[AppointmentRoute] Invalid auth token in request ${requestId}`);
